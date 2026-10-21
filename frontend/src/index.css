@@ -1,0 +1,137 @@
+@import "tailwindcss";
+
+/* `dark:` sigue al tema elegido (data-theme en <html>), no solo a la preferencia del sistema. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+@theme {
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+
+  /* Principal (índigo) — también "Presente" */
+  --color-brand: #5046e5;
+  --color-brand-soft: #eeedfd;
+  --color-brand-ink: #3a31c7;
+
+  /* Éxito / estudiantes (turquesa) */
+  --color-teal: #0f8f86;
+  --color-teal-soft: #e2f6f4;
+  --color-teal-ink: #0b6e67;
+
+  /* Alerta / faltas (naranja) */
+  --color-alert: #e8590c;
+  --color-alert-soft: #ffede1;
+  --color-alert-ink: #b4440a;
+
+  /* Actividades / acento (rosado) */
+  --color-accent: #db2777;
+  --color-accent-soft: #fce7f3;
+  --color-accent-ink: #a3195b;
+
+  /* Atraso (ámbar) */
+  --color-warning: #d97706;
+  --color-warning-soft: #fef3c7;
+  --color-warning-ink: #92400e;
+
+  /* Justificado (celeste) */
+  --color-info: #0284c7;
+  --color-info-soft: #e0f2fe;
+  --color-info-ink: #075985;
+
+  /* Lila suave (accesos y fondos decorativos) */
+  --color-violet-soft: #ece9fe;
+  --color-violet-ink: #6d5ae6;
+
+  /*
+   * Gráficos: los mismos estados (Presente, Atraso, Justificado, Falta), en ese orden.
+   * Validados para daltonismo y contraste (claro y oscuro).
+   */
+  --color-chart-present: #5046e5;
+  --color-chart-late: #d97706;
+  --color-chart-excused: #0284c7;
+  --color-chart-absent: #e8590c;
+
+  /* Base de la interfaz */
+  --color-canvas: #f5f6fb;
+  --color-surface: #ffffff;
+  --color-ink: #111427;
+  --color-muted: #5a6078;
+  --color-line: #e6e8f2;
+
+  /* Decoración del login */
+  --color-deco-violet: #6d64f0;
+  --color-deco-orange: #ff8a3d;
+  --color-deco-teal: #2dd4bf;
+}
+
+/*
+ * Modo oscuro: se redefinen los mismos tokens, así todos los componentes cambian sin tocarlos.
+ * Solo en pantalla: al imprimir se usa siempre la paleta clara.
+ */
+@media screen {
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+
+    --color-brand: #6f66f0;
+    --color-brand-soft: #25234d;
+    --color-brand-ink: #b9b4ff;
+
+    --color-teal: #22a99e;
+    --color-teal-soft: #11302e;
+    --color-teal-ink: #6fe0d4;
+
+    --color-alert: #f2702a;
+    --color-alert-soft: #3b2418;
+    --color-alert-ink: #ffb48e;
+
+    --color-accent: #ec4f97;
+    --color-accent-soft: #3a1c2e;
+    --color-accent-ink: #f9a8d4;
+
+    --color-warning: #f0a020;
+    --color-warning-soft: #3a2d12;
+    --color-warning-ink: #fcd36a;
+
+    --color-info: #38b6f0;
+    --color-info-soft: #10293a;
+    --color-info-ink: #8fd6fb;
+
+    --color-violet-soft: #2a2552;
+
+    --color-chart-present: #6f66f0;
+    --color-chart-late: #c07a0c;
+    --color-chart-excused: #2a9ad0;
+    --color-chart-absent: #de5f22;
+    --color-violet-ink: #b3a8ff;
+
+    --color-canvas: #0d0f1c;
+    --color-surface: #161929;
+    --color-ink: #e8eaf6;
+    --color-muted: #9aa0bd;
+    --color-line: #2a2e47;
+  }
+}
+
+@layer base {
+  html {
+    @apply bg-canvas text-ink antialiased;
+  }
+  body {
+    @apply min-h-screen font-sans;
+  }
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-brand;
+  }
+}
+
+/* Impresión: conserva colores de fondo y quita el encabezado/pie del navegador (título, URL, fecha). */
+@media print {
+  @page {
+    size: landscape;
+    margin: 0;
+  }
+  html,
+  body {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    background: white;
+  }
+}
