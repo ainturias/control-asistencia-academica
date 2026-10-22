@@ -1,0 +1,4 @@
+config:
+  aws:region: us-east-2
+  asistencia-infra-pulumi:instanceType: t3.micro
+  asistencia-infra-pulumi:sshKeyPath: ~/.ssh/diplo_mod2_key.pub
