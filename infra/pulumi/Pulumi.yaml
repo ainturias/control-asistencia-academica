@@ -1,0 +1,3 @@
+name: asistencia-infra-pulumi
+runtime: nodejs
+description: Aprovisionamiento de servidor basico con Pulumi (TypeScript) - DevSecOps Modulo 2
