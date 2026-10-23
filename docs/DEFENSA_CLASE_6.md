@@ -96,3 +96,79 @@ Explica cada herramienta según vaya apareciendo en pantalla:
 
 * **P: ¿Qué es un Conjunto de Cambios (Change Set)?**
   * **R:** *"Es el equivalente a `terraform plan`. Permite ver la previsualización exacta de qué recursos se van a crear, modificar o eliminar antes de aplicar cambios a una pila en producción."*
+
+---
+
+## 6. Comandos Individuales para Cada Escáner (Ejecución Paso a Paso)
+
+Si en la defensa el docente te pide: *"No corras el script completo, corre cada herramienta una por una y explícame el comando"*, sigue este orden lógico:
+
+```bash
+# Ubícate siempre primero en la raíz del proyecto
+cd ~/Escritorio/PC-TODO/diplo-mod-2/control-asistencia-academica
+```
+
+---
+
+### Paso 1: `cfn-lint` (Linter y Validador de Sintaxis)
+
+* **¿Por qué va de primero?**  
+  Es el filtro más básico y rápido. Antes de analizar seguridad, primero debemos comprobar que la plantilla esté bien escrita, sin errores de indentación YAML ni propiedades inválidas para AWS.
+* **Comando a ejecutar:**
+  ```bash
+  cfn-lint infra/cloudformation/template.yaml
+  ```
+* **¿Qué hace este comando?**  
+  Compara tu archivo con la especificación oficial de AWS (*CloudFormation Resource Specification*). Revisa que los tipos de recursos existan, que los parámetros tengan tipos válidos (`String`, `AWS::EC2::Image::Id`) y que no haya referencias circulares.
+* **¿Qué resultado esperar?**  
+  Termina silenciosamente en menos de 1 segundo sin imprimir errores (código de salida 0), lo que significa que el template es **100% válido para AWS**.
+
+---
+
+### Paso 2: `terrascan` (Cumplimiento de Políticas CIS Benchmarks)
+
+* **¿Por qué va de segundo?**  
+  Una vez que sabemos que la plantilla compila, evaluamos si la arquitectura cloud cumple con las mejores prácticas de seguridad de la industria.
+* **Comando a ejecutar:**
+  ```bash
+  terrascan scan -i cft -f infra/cloudformation/template.yaml
+  ```
+* **¿Qué significan las opciones del comando?**
+  * `scan`: Le indica a Terrascan que inicie una auditoría.
+  * `-i cft`: Especifica el tipo de tecnología (*IaC Type*): **CloudFormation Template (`cft`)**.
+  * `-f infra/cloudformation/template.yaml`: Ruta exacta del archivo que queremos auditar.
+* **¿Qué hace este comando?**  
+  Ejecuta 142 reglas de seguridad basadas en el estándar **CIS Benchmarks** utilizando el motor Open Policy Agent (OPA).
+* **¿Qué resultado esperar y qué decir?**  
+  Muestra una tabla con observaciones normales de severidad Alta/Media: alerta que los puertos 22 (SSH) y 5432 (Postgres) están abiertos a `0.0.0.0/0` y sugiere activar CloudWatch Detailed Monitoring y tokens de seguridad IMDSv2.
+
+---
+
+### Paso 3: `gitleaks` (Secret Scanning / Detección de Credenciales)
+
+* **¿Por qué va de tercero?**  
+  Es la última barrera antes del despliegue. Evita que por descuido subamos contraseñas de bases de datos, tokens JWT o credenciales de AWS al repositorio o a la nube.
+* **Comando a ejecutar:**
+  ```bash
+  gitleaks detect --no-git -v -s infra/cloudformation/template.yaml
+  ```
+* **¿Qué significan las opciones del comando?**
+  * `detect`: Activa el modo de escaneo de secretos.
+  * `--no-git`: Le indica que analice el archivo directamente en el disco (sin obligar a que esté en un commit previo).
+  * `-v`: Modo detallado (*verbose*), muestra estadísticas de tiempo y escaneo.
+  * `-s <archivo>`: Ruta del archivo específico a inspeccionar (*source*).
+* **¿Qué hace este comando?**  
+  Busca mediante patrones regex y cálculo de entropía de Shannon si existen llaves privadas, passwords en texto plano o API keys expuestas.
+* **¿Qué resultado esperar y qué decir?**  
+  Termina en 5 milisegundos mostrando `no leaks found` (0 fugas), confirmando que el código está limpio de credenciales sensibles.
+
+---
+
+### Tabla Resumen de Comandos Rápidos
+
+| Orden | Herramienta | Comando para la terminal | ¿Qué valida? |
+| :---: | :--- | :--- | :--- |
+| **1°** | **`cfn-lint`** | `cfn-lint infra/cloudformation/template.yaml` | Sintaxis y esquemas oficiales de AWS |
+| **2°** | **`terrascan`** | `terrascan scan -i cft -f infra/cloudformation/template.yaml` | Políticas de seguridad y CIS Benchmarks |
+| **3°** | **`gitleaks`** | `gitleaks detect --no-git -v -s infra/cloudformation/template.yaml` | Fuga de contraseñas y llaves de acceso |
+
