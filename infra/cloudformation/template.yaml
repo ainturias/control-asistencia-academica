@@ -1,0 +1,187 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Aprovisionamiento con AWS CloudFormation (2 Servidores EC2 y Grupos de Seguridad)
+  Proyecto: Control de Asistencia Academica
+  Diplomado DevSecOps - Modulo 2 (IaC)
+
+# PARAMETROS DE ENTRADA
+Parameters:
+  Proyecto:
+    Type: String
+    Default: control-asistencia
+    Description: Nombre identificador del proyecto
+
+  Ambiente:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, qa, prod]
+    Description: Entorno de despliegue (dev, qa, prod)
+
+  TipoInstancia:
+    Type: String
+    Default: t3.micro
+    AllowedValues: [t3.micro, t3.small]
+    Description: Tipo de instancia EC2 para los servidores
+
+  KeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Default: diplo-mod2-key
+    Description: Par de llaves SSH para conexion a los servidores
+
+  ImagenAmi:
+    Type: AWS::EC2::Image::Id
+    Default: ami-0ee52710c51e09069
+    Description: AMI de Ubuntu 22.04 LTS en us-east-2
+
+# RECURSOS (RESOURCES)
+Resources:
+
+
+  # 1. GRUPO DE SEGURIDAD: BACKEND (SSH 22, API 3000, DB 5432)
+  BackendSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Reglas de firewall para Servidor Backend (NestJS / PostgreSQL)
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+          Description: Acceso administrativo por SSH
+        - IpProtocol: tcp
+          FromPort: 3000
+          ToPort: 3000
+          CidrIp: 0.0.0.0/0
+          Description: Puerto API REST NestJS
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          CidrIp: 0.0.0.0/0
+          Description: Puerto de conexion PostgreSQL
+      Tags:
+        - Key: Name
+          Value: !Sub "sg-backend-${Proyecto}-${Ambiente}"
+        - Key: Proyecto
+          Value: !Ref Proyecto
+        - Key: Ambiente
+          Value: !Ref Ambiente
+
+  # 2. GRUPO DE SEGURIDAD: FRONTEND (SSH 22, HTTP 80)
+  FrontendSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Reglas de firewall para Servidor Frontend (React / Nginx)
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+          Description: Acceso administrativo por SSH
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+          Description: Acceso web HTTP Nginx
+      Tags:
+        - Key: Name
+          Value: !Sub "sg-frontend-${Proyecto}-${Ambiente}"
+        - Key: Proyecto
+          Value: !Ref Proyecto
+        - Key: Ambiente
+          Value: !Ref Ambiente
+
+  # 3. INSTANCIA EC2: SERVIDOR BACKEND
+  BackendInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref ImagenAmi
+      InstanceType: !Ref TipoInstancia
+      KeyName: !Ref KeyName
+      SecurityGroupIds:
+        - !Ref BackendSecurityGroup
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeSize: 20
+            VolumeType: gp3
+            Encrypted: true
+            DeleteOnTermination: true
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          apt-get update -y
+          apt-get install -y nginx
+          echo "<h1>Control de Asistencia - Servidor Backend (API / DB)</h1><p>Ambiente: ${Ambiente} | Estado: Activo | Aprovisionado con AWS CloudFormation</p>" > /var/www/html/index.html
+          systemctl restart nginx
+      Tags:
+        - Key: Name
+          Value: !Sub "vm-backend-${Proyecto}-${Ambiente}"
+        - Key: Proyecto
+          Value: !Ref Proyecto
+        - Key: Ambiente
+          Value: !Ref Ambiente
+        - Key: Role
+          Value: Backend-API-DB
+
+  # 4. INSTANCIA EC2: SERVIDOR FRONTEND
+  FrontendInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref ImagenAmi
+      InstanceType: !Ref TipoInstancia
+      KeyName: !Ref KeyName
+      SecurityGroupIds:
+        - !Ref FrontendSecurityGroup
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeSize: 15
+            VolumeType: gp3
+            Encrypted: true
+            DeleteOnTermination: true
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          apt-get update -y
+          apt-get install -y nginx
+          echo "<h1>Control de Asistencia - Servidor Frontend (UI / Web)</h1><p>Ambiente: ${Ambiente} | Estado: Activo | Aprovisionado con AWS CloudFormation</p>" > /var/www/html/index.html
+          systemctl restart nginx
+      Tags:
+        - Key: Name
+          Value: !Sub "vm-frontend-${Proyecto}-${Ambiente}"
+        - Key: Proyecto
+          Value: !Ref Proyecto
+        - Key: Ambiente
+          Value: !Ref Ambiente
+        - Key: Role
+          Value: Frontend-UI-Nginx
+
+# SALIDAS (OUTPUTS)
+Outputs:
+  IdBackend:
+    Description: ID de la instancia EC2 del Servidor Backend
+    Value: !Ref BackendInstance
+
+  IpPublicaBackend:
+    Description: IP publica del Backend
+    Value: !GetAtt BackendInstance.PublicIp
+
+  IdFrontend:
+    Description: ID de la instancia EC2 del Servidor Frontend
+    Value: !Ref FrontendInstance
+
+  IpPublicaFrontend:
+    Description: IP publica del Frontend
+    Value: !GetAtt FrontendInstance.PublicIp
+
+  UrlWebFrontend:
+    Description: URL publica para acceder a la aplicacion web
+    Value: !Sub "http://${FrontendInstance.PublicIp}"
+
+  ConexionSSHBackend:
+    Description: Comando para conectarse por SSH al Backend
+    Value: !Sub "ssh -i ~/.ssh/diplo_mod2_key ubuntu@${BackendInstance.PublicIp}"
+
+  ConexionSSHFrontend:
+    Description: Comando para conectarse por SSH al Frontend
+    Value: !Sub "ssh -i ~/.ssh/diplo_mod2_key ubuntu@${FrontendInstance.PublicIp}"
