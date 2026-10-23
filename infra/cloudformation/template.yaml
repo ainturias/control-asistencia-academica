@@ -1,0 +1,334 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Aprovisionamiento de Infraestructura con AWS CloudFormation
+  Proyecto: Control de Asistencia Academica (Backend NestJS + Frontend React)
+  Diplomado DevSecOps - Modulo 2 (IaC)
+
+# ==============================================================================
+# PARAMETROS DE ENTRADA
+# ==============================================================================
+Parameters:
+  Proyecto:
+    Type: String
+    Default: control-asistencia-academica
+    Description: Nombre identificador del proyecto
+
+  Ambiente:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, qa, prod]
+    Description: Entorno de despliegue (dev, qa, prod)
+
+  TipoInstancia:
+    Type: String
+    Default: t3.micro
+    AllowedValues: [t3.micro, t3.small, t3.medium]
+    Description: Tipo de instancia EC2 para los servidores
+
+  KeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Default: diplo-mod2-key
+    Description: Par de llaves SSH para conexion a las instancias
+
+  ImagenAmi:
+    Type: AWS::EC2::Image::Id
+    Default: ami-0ee52710c51e09069
+    Description: ID de la AMI de Ubuntu 22.04 LTS en us-east-2
+
+  RepoUrl:
+    Type: String
+    Default: https://github.com/ainturias/control-asistencia-academica.git
+    Description: Repositorio Git del codigo de la aplicacion
+
+# ==============================================================================
+# RECURSOS CLOUD (RESOURCES)
+# ==============================================================================
+Resources:
+
+  # ----------------------------------------------------------------------------
+  # 1. GRUPO DE SEGURIDAD: BACKEND (SSH 22, API 3000, PostgreSQL 5432)
+  # ----------------------------------------------------------------------------
+  BackendSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Reglas de seguridad para Servidor Backend NestJS y PostgreSQL
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+          Description: Acceso SSH de administracion
+        - IpProtocol: tcp
+          FromPort: 3000
+          ToPort: 3000
+          CidrIp: 0.0.0.0/0
+          Description: API NestJS REST y WebSockets
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          CidrIp: 0.0.0.0/0
+          Description: Base de datos PostgreSQL
+      Tags:
+        - Key: Name
+          Value: !Sub "sg-backend-${Proyecto}-${Ambiente}"
+        - Key: Proyecto
+          Value: !Ref Proyecto
+        - Key: Ambiente
+          Value: !Ref Ambiente
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  # ----------------------------------------------------------------------------
+  # 2. GRUPO DE SEGURIDAD: FRONTEND (SSH 22, HTTP 80)
+  # ----------------------------------------------------------------------------
+  FrontendSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Reglas de seguridad para Servidor Frontend React y Nginx
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+          Description: Acceso SSH de administracion
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+          Description: Servidor Web Nginx HTTP
+      Tags:
+        - Key: Name
+          Value: !Sub "sg-frontend-${Proyecto}-${Ambiente}"
+        - Key: Proyecto
+          Value: !Ref Proyecto
+        - Key: Ambiente
+          Value: !Ref Ambiente
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  # ----------------------------------------------------------------------------
+  # 3. INSTANCIA EC2: BACKEND (NestJS + PostgreSQL + PM2)
+  # ----------------------------------------------------------------------------
+  BackendInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref ImagenAmi
+      InstanceType: !Ref TipoInstancia
+      KeyName: !Ref KeyName
+      SecurityGroupIds:
+        - !Ref BackendSecurityGroup
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeSize: 20
+            VolumeType: gp3
+            Encrypted: true
+            DeleteOnTermination: true
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -e
+          exec > /var/log/user_data.log 2>&1
+
+          echo "=== [CloudFormation] Iniciando aprovisionamiento del Backend ==="
+
+          # 1. Configurar memoria Swap de 2GB
+          fallocate -l 2G /swapfile
+          chmod 600 /swapfile
+          mkswap /swapfile
+          swapon /swapfile
+          echo '/swapfile none swap sw 0 0' >> /etc/fstab
+
+          # 2. Instalar Node.js 22, Git y PostgreSQL
+          curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+          apt-get update -y
+          apt-get install -y nodejs git postgresql postgresql-contrib
+          npm install -g pm2
+
+          # 3. Configurar base de datos PostgreSQL
+          systemctl start postgresql
+          systemctl enable postgresql
+          sudo -u postgres psql -c "CREATE USER nestuser WITH PASSWORD 'nestpass123';"
+          sudo -u postgres psql -c "CREATE DATABASE modulo2 OWNER nestuser;"
+          sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE modulo2 TO nestuser;"
+
+          # 4. Clonar repositorio
+          mkdir -p /home/ubuntu/app
+          git clone ${RepoUrl} /home/ubuntu/app
+          cd /home/ubuntu/app/backend
+
+          # 5. Generar archivo de configuracion .env
+          cat <<EOT > .env
+          PORT=3000
+          CORS_ORIGIN=*
+          DB_HOST=localhost
+          DB_PORT=5432
+          DB_USER=nestuser
+          DB_PASSWORD=nestpass123
+          DB_NAME=modulo2
+          JWT_SECRET=diplomado-devsecops-secreto-2026
+          JWT_EXPIRES_IN=8h
+          APP_TZ=America/La_Paz
+          ADMIN_EMAIL=admin@gmail.com
+          ADMIN_PASSWORD=123456789
+          ADMIN_NAME=Administrador
+          EOT
+
+          # 6. Permisos, instalacion y compilacion
+          chown -R ubuntu:ubuntu /home/ubuntu/app
+          sudo -u ubuntu npm install
+          sudo -u ubuntu npm run build
+
+          # 7. Ejecutar con PM2
+          sudo -u ubuntu pm2 start dist/main.js --name backend
+          sudo -u ubuntu pm2 save
+          env PATH=$PATH:/usr/bin /usr/lib/node_modules/pm2/bin/pm2 startup systemd -u ubuntu --hp /home/ubuntu
+
+          echo "=== [CloudFormation] Backend aprovisionado y ejecutandose exitosamente ==="
+      Tags:
+        - Key: Name
+          Value: !Sub "backend-${Proyecto}-${Ambiente}"
+        - Key: Proyecto
+          Value: !Ref Proyecto
+        - Key: Ambiente
+          Value: !Ref Ambiente
+        - Key: Role
+          Value: Backend-API-DB
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  # ----------------------------------------------------------------------------
+  # 4. INSTANCIA EC2: FRONTEND (React + Nginx Proxy Inverso)
+  # ----------------------------------------------------------------------------
+  FrontendInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref ImagenAmi
+      InstanceType: !Ref TipoInstancia
+      KeyName: !Ref KeyName
+      SecurityGroupIds:
+        - !Ref FrontendSecurityGroup
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeSize: 15
+            VolumeType: gp3
+            Encrypted: true
+            DeleteOnTermination: true
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -e
+          exec > /var/log/user_data.log 2>&1
+
+          echo "=== [CloudFormation] Iniciando aprovisionamiento del Frontend ==="
+
+          # 1. Configurar memoria Swap de 2GB
+          fallocate -l 2G /swapfile
+          chmod 600 /swapfile
+          mkswap /swapfile
+          swapon /swapfile
+          echo '/swapfile none swap sw 0 0' >> /etc/fstab
+
+          # 2. Instalar Node.js 22, Git y Nginx
+          curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+          apt-get update -y
+          apt-get install -y nodejs git nginx
+
+          # 3. Clonar repositorio y compilar React
+          mkdir -p /home/ubuntu/app
+          git clone ${RepoUrl} /home/ubuntu/app
+          cd /home/ubuntu/app/frontend
+
+          cat <<EOT > .env
+          VITE_API_URL=/api
+          EOT
+
+          chown -R ubuntu:ubuntu /home/ubuntu/app
+          sudo -u ubuntu npm install
+          sudo -u ubuntu npm run build
+
+          # 4. Publicar artefactos en Nginx
+          rm -rf /var/www/html/*
+          cp -r dist/* /var/www/html/
+
+          # 5. Configurar Proxy Inverso hacia el Backend
+          cat <<EOT > /etc/nginx/sites-available/default
+          server {
+              listen 80 default_server;
+              listen [::]:80 default_server;
+              server_name _;
+              root /var/www/html;
+              index index.html;
+
+              location / {
+                  try_files $uri $uri/ /index.html;
+              }
+
+              location /api/ {
+                  proxy_pass http://${BackendInstance.PublicIp}:3000/api/;
+                  proxy_set_header Host $host;
+                  proxy_set_header X-Real-IP $remote_addr;
+                  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                  proxy_set_header X-Forwarded-Proto $scheme;
+              }
+
+              location /socket.io/ {
+                  proxy_pass http://${BackendInstance.PublicIp}:3000/socket.io/;
+                  proxy_http_version 1.1;
+                  proxy_set_header Upgrade $http_upgrade;
+                  proxy_set_header Connection "upgrade";
+                  proxy_set_header Host $host;
+              }
+          }
+          EOT
+
+          systemctl restart nginx
+          echo "=== [CloudFormation] Frontend aprovisionado y Nginx activo exitosamente ==="
+      Tags:
+        - Key: Name
+          Value: !Sub "frontend-${Proyecto}-${Ambiente}"
+        - Key: Proyecto
+          Value: !Ref Proyecto
+        - Key: Ambiente
+          Value: !Ref Ambiente
+        - Key: Role
+          Value: Frontend-UI-Nginx
+        - Key: ManagedBy
+          Value: CloudFormation
+
+# ==============================================================================
+# SALIDAS (OUTPUTS)
+# ==============================================================================
+Outputs:
+  IdInstanciaBackend:
+    Description: ID de la instancia EC2 del Servidor Backend
+    Value: !Ref BackendInstance
+
+  IpPublicaBackend:
+    Description: Direccion IP publica del Backend
+    Value: !GetAtt BackendInstance.PublicIp
+
+  UrlApiBackend:
+    Description: URL publica directa a la API de NestJS
+    Value: !Sub "http://${BackendInstance.PublicIp}:3000/api"
+
+  IdInstanciaFrontend:
+    Description: ID de la instancia EC2 del Servidor Frontend
+    Value: !Ref FrontendInstance
+
+  IpPublicaFrontend:
+    Description: Direccion IP publica del Frontend
+    Value: !GetAtt FrontendInstance.PublicIp
+
+  UrlWebFrontend:
+    Description: URL publica del sitio web (Nginx)
+    Value: !Sub "http://${FrontendInstance.PublicIp}"
+
+  ConexionSSHBackend:
+    Description: Comando para conectarse por SSH al Backend
+    Value: !Sub "ssh -i ~/.ssh/diplo_mod2_key ubuntu@${BackendInstance.PublicIp}"
+
+  ConexionSSHFrontend:
+    Description: Comando para conectarse por SSH al Frontend
+    Value: !Sub "ssh -i ~/.ssh/diplo_mod2_key ubuntu@${FrontendInstance.PublicIp}"
