@@ -48,18 +48,18 @@ El template [`template.yaml`](template.yaml) aprovisiona los siguientes componen
 
 ### Opción A: Despliegue mediante la Consola Web de AWS (Recomendado para la clase)
 
-1. Iniciar sesión en la consola de **AWS Management Console** y seleccionar la región **US East (Ohio) `us-east-2`**.
+1. Iniciar sesión en la consola de **AWS Management Console** y seleccionar la región **EE. UU. Este (Ohio) `us-east-2`**.
 2. Navegar al servicio **CloudFormation** en la barra de búsqueda superior.
-3. Hacer clic en el botón naranja **Create stack** (Con nuevos recursos).
-4. En la sección **Prerequisite - Prepare template**, seleccionar **Template is ready**.
-5. En **Template source**, seleccionar **Upload a template file**.
-6. Hacer clic en **Choose file** y seleccionar el archivo [`infra/cloudformation/template.yaml`](template.yaml).
-7. Hacer clic en **Next**.
-8. En **Stack name**, colocar: `stack-asistencia-dev`.
-9. Verificar o personalizar los parámetros (Ambiente, KeyName, etc.) y hacer clic en **Next**.
-10. Avanzar en las opciones de configuración y hacer clic en **Submit**.
-11. Monitorear los eventos hasta que el estado cambie a **`CREATE_COMPLETE`**.
-12. Ir a la pestaña **Outputs** para obtener la IP pública y URL del Frontend.
+3. Hacer clic en el botón naranja **Crear pila** (Con recursos nuevos - estándar).
+4. En la sección **Requisito previo**, seleccionar **La plantilla está lista**.
+5. En **Especificar plantilla**, seleccionar **Cargar un archivo de plantilla**.
+6. Hacer clic en **Seleccionar archivo** (o *Elegir archivo*) y seleccionar el archivo [`infra/cloudformation/template.yaml`](template.yaml).
+7. Hacer clic en **Siguiente**.
+8. En **Nombre de la pila**, colocar: `stack-asistencia-dev`.
+9. Verificar o personalizar los parámetros (Ambiente, KeyName, etc.) y hacer clic en **Siguiente**.
+10. Avanzar en las opciones de configuración y hacer clic en **Enviar**.
+11. Monitorear la pestaña **Eventos** hasta que el estado cambie a **`CREATE_COMPLETE`**.
+12. Ir a la pestaña **Salidas** para obtener la IP pública y URL del Frontend.
 
 ### Opción B: Despliegue mediante AWS CLI
 
