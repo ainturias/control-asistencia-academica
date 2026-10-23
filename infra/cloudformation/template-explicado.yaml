@@ -1,0 +1,292 @@
+# ==============================================================================
+# GUIA DE ESTUDIO Y EXPLICACION DETALLADA DE AWS CLOUDFORMATION
+# Archivo de Referencia: template-explicado.yaml
+# Proyecto: Control de Asistencia Academica
+# ==============================================================================
+#
+# ¿QUE ES ESTE ARCHIVO?
+# Este archivo es una plantilla declarativa (Template) de AWS CloudFormation escrita en YAML.
+# En lugar de entrar a la consola de AWS a dar clics para crear servidores y firewalls,
+# aqui definimos todo como codigo (IaC). Cuando le entregas este archivo a AWS, el servicio
+# CloudFormation lee las instrucciones y crea todos los recursos en orden de dependencia.
+#
+# ==============================================================================
+
+# 1. VERSION DEL FORMATO DE LA PLANTILLA
+# Esta es la version fija que exige AWS para CloudFormation. Siempre es "2010-09-09".
+# No representa la fecha actual, sino el estandar de sintaxis del motor de AWS.
+AWSTemplateFormatVersion: "2010-09-09"
+
+# 2. DESCRIPCION
+# Explica brevemente que hace la plantilla. El simbolo '>' en YAML indica que el texto
+# siguiente ocupa varias lineas pero se interpretara como un solo parrafo.
+Description: >
+  Aprovisionamiento con AWS CloudFormation (2 Servidores EC2 y Grupos de Seguridad)
+  Proyecto: Control de Asistencia Academica
+  Diplomado DevSecOps - Modulo 2 (IaC)
+
+
+# ==============================================================================
+# SECCION: PARAMETROS DE ENTRADA (PARAMETERS)
+# ==============================================================================
+# Los parametros son las variables que el usuario puede elegir o cambiar antes de
+# desplegar el stack, sin necesidad de modificar el codigo de abajo.
+Parameters:
+
+  # Parametro 1: Nombre del Proyecto
+  # Se usa para nombrar recursos y crear etiquetas (Tags) de forma dinamica.
+  Proyecto:
+    Type: String                       # Tipo de dato: Cadena de texto
+    Default: control-asistencia        # Valor por defecto si no se ingresa otro
+    Description: Nombre identificador del proyecto
+
+  # Parametro 2: Entorno de Despliegue
+  # Permite que este mismo template sirva para Desarrollo, Pruebas o Produccion.
+  Ambiente:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, qa, prod]     # Lista cerrada: Solo permite elegir una de estas 3 opciones
+    Description: Entorno de despliegue (dev, qa, prod)
+
+  # Parametro 3: Tipo de Instancia EC2
+  # Define la capacidad de computo (CPU y RAM) de los servidores.
+  # t3.micro = 2 vCPU, 1 GB RAM (Aplica para la capa gratuita de AWS)
+  # t3.small = 2 vCPU, 2 GB RAM
+  TipoInstancia:
+    Type: String
+    Default: t3.micro
+    AllowedValues: [t3.micro, t3.small]
+    Description: Tipo de instancia EC2 para los servidores
+
+  # Parametro 4: Par de Llaves SSH (KeyName)
+  # El tipo especial 'AWS::EC2::KeyPair::KeyName' hace que en la consola de AWS
+  # aparezca un menu desplegable con las llaves SSH existentes en tu cuenta.
+  KeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Default: diplo-mod2-key
+    Description: Par de llaves SSH para conexion a los servidores
+
+  # Parametro 5: Identificador de Imagen de Sistema Operativo (AMI)
+  # El tipo 'AWS::EC2::Image::Id' valida que el texto sea un identificador real de AMI de AWS.
+  # ami-0ee52710c51e09069 corresponde a Ubuntu 22.04 LTS (Jammy) en la region us-east-2 (Ohio).
+  ImagenAmi:
+    Type: AWS::EC2::Image::Id
+    Default: ami-0ee52710c51e09069
+    Description: AMI de Ubuntu 22.04 LTS en us-east-2
+
+
+# ==============================================================================
+# SECCION: RECURSOS (RESOURCES)
+# ==============================================================================
+# Esta es la seccion obligatoria y principal. Aqui declaramos los componentes
+# de infraestructura que AWS debe crear en la nube.
+Resources:
+
+  # ----------------------------------------------------------------------------
+  # RECURSO 1: GRUPO DE SEGURIDAD (FIREWALL VIRTUAL) PARA EL BACKEND
+  # ----------------------------------------------------------------------------
+  # Controla que trafico de red tiene permitido entrar y salir del servidor Backend.
+  BackendSecurityGroup:
+    Type: AWS::EC2::SecurityGroup      # Tipo oficial de recurso en AWS
+    Properties:
+      GroupDescription: Reglas de firewall para Servidor Backend (NestJS / PostgreSQL)
+      
+      # Reglas de Entrada (Ingress): Puertos que abrimos para recibir conexiones
+      SecurityGroupIngress:
+        # Regla A: Puerto 22 para administracion remota por SSH
+        - IpProtocol: tcp              # Protocolo de transporte
+          FromPort: 22                 # Puerto inicial
+          ToPort: 22                   # Puerto final
+          CidrIp: 0.0.0.0/0            # Origen: 0.0.0.0/0 significa cualquier IP de internet
+          Description: Acceso administrativo por SSH
+
+        # Regla B: Puerto 3000 para la API de NestJS
+        - IpProtocol: tcp
+          FromPort: 3000
+          ToPort: 3000
+          CidrIp: 0.0.0.0/0
+          Description: Puerto API REST NestJS
+
+        # Regla C: Puerto 5432 para la base de datos PostgreSQL
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          CidrIp: 0.0.0.0/0
+          Description: Puerto de conexion PostgreSQL
+
+      # Etiquetas (Tags): Metadatos para identificar el recurso en la consola de AWS
+      # La funcion '!Sub' reemplaza variables dinamicas como ${Proyecto} y ${Ambiente}
+      # La funcion '!Ref' obtiene el valor seleccionado en el parametro correspondiente
+      Tags:
+        - Key: Name
+          Value: !Sub "sg-backend-${Proyecto}-${Ambiente}"
+        - Key: Proyecto
+          Value: !Ref Proyecto
+        - Key: Ambiente
+          Value: !Ref Ambiente
+
+
+  # ----------------------------------------------------------------------------
+  # RECURSO 2: GRUPO DE SEGURIDAD PARA EL FRONTEND
+  # ----------------------------------------------------------------------------
+  # Firewall virtual exclusivo para el servidor web donde estara la interfaz React.
+  FrontendSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Reglas de firewall para Servidor Frontend (React / Nginx)
+      
+      SecurityGroupIngress:
+        # Regla A: Puerto 22 (SSH)
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+          Description: Acceso administrativo por SSH
+
+        # Regla B: Puerto 80 (HTTP) para que cualquier persona pueda ver la pagina web
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+          Description: Acceso web HTTP Nginx
+
+      Tags:
+        - Key: Name
+          Value: !Sub "sg-frontend-${Proyecto}-${Ambiente}"
+        - Key: Proyecto
+          Value: !Ref Proyecto
+        - Key: Ambiente
+          Value: !Ref Ambiente
+
+
+  # ----------------------------------------------------------------------------
+  # RECURSO 3: SERVIDOR VIRTUAL EC2 PARA EL BACKEND
+  # ----------------------------------------------------------------------------
+  BackendInstance:
+    Type: AWS::EC2::Instance           # Recurso de maquina virtual en AWS
+    Properties:
+      ImageId: !Ref ImagenAmi          # Inyecta la AMI de Ubuntu 22.04
+      InstanceType: !Ref TipoInstancia # Inyecta t3.micro o t3.small
+      KeyName: !Ref KeyName            # Inyecta la llave SSH
+      
+      # Asigna el grupo de seguridad que definimos arriba
+      SecurityGroupIds:
+        - !Ref BackendSecurityGroup
+
+      # Configuracion del disco duro virtual (EBS)
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1        # Nombre del disco principal del sistema operativo
+          Ebs:
+            VolumeSize: 20             # 20 Gigabytes de disco
+            VolumeType: gp3            # Tipo SSD moderno gp3 (alto rendimiento y bajo costo)
+            Encrypted: true            # Cifrado en reposo (Excelente practica de seguridad DevSecOps)
+            DeleteOnTermination: true  # Si borramos la instancia, el disco se elimina para no generar costos
+
+      # UserData: Script de automatizacion
+      # Se ejecuta automaticamente como superusuario (root) la primera vez que la maquina enciende.
+      # 'Fn::Base64' convierte el script a base64 porque AWS EC2 lo exige en ese formato.
+      # '!Sub |' permite inyectar variables de CloudFormation dentro del script bash.
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          # Actualiza los repositorios de paquetes de Ubuntu
+          apt-get update -y
+          # Instala el servidor web Nginx
+          apt-get install -y nginx
+          # Escribe una pagina de inicio personalizada para verificar que el servidor responde
+          echo "<h1>Control de Asistencia - Servidor Backend (API / DB)</h1><p>Ambiente: ${Ambiente} | Estado: Activo | Aprovisionado con AWS CloudFormation</p>" > /var/www/html/index.html
+          # Reinicia Nginx para aplicar cambios
+          systemctl restart nginx
+
+      Tags:
+        - Key: Name
+          Value: !Sub "vm-backend-${Proyecto}-${Ambiente}"
+        - Key: Proyecto
+          Value: !Ref Proyecto
+        - Key: Ambiente
+          Value: !Ref Ambiente
+        - Key: Role
+          Value: Backend-API-DB
+
+
+  # ----------------------------------------------------------------------------
+  # RECURSO 4: SERVIDOR VIRTUAL EC2 PARA EL FRONTEND
+  # ----------------------------------------------------------------------------
+  FrontendInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref ImagenAmi
+      InstanceType: !Ref TipoInstancia
+      KeyName: !Ref KeyName
+      
+      SecurityGroupIds:
+        - !Ref FrontendSecurityGroup
+
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeSize: 15             # 15 Gigabytes de disco para el Frontend
+            VolumeType: gp3
+            Encrypted: true            # Cifrado en reposo
+            DeleteOnTermination: true
+
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          apt-get update -y
+          apt-get install -y nginx
+          echo "<h1>Control de Asistencia - Servidor Frontend (UI / Web)</h1><p>Ambiente: ${Ambiente} | Estado: Activo | Aprovisionado con AWS CloudFormation</p>" > /var/www/html/index.html
+          systemctl restart nginx
+
+      Tags:
+        - Key: Name
+          Value: !Sub "vm-frontend-${Proyecto}-${Ambiente}"
+        - Key: Proyecto
+          Value: !Ref Proyecto
+        - Key: Ambiente
+          Value: !Ref Ambiente
+        - Key: Role
+          Value: Frontend-UI-Nginx
+
+
+# ==============================================================================
+# SECCION: SALIDAS (OUTPUTS)
+# ==============================================================================
+# Los Outputs son los resultados que CloudFormation te muestra en pantalla una vez
+# que termina de crear todos los recursos. Evita tener que ir a buscar las IPs manualmente.
+Outputs:
+
+  # ID de la instancia de Backend (ej: i-0abc123456789def0)
+  IdBackend:
+    Description: ID de la instancia EC2 del Servidor Backend
+    Value: !Ref BackendInstance        # Al hacer !Ref sobre una EC2, retorna su ID
+
+  # IP publica del Backend para conectarse a ella
+  # '!GetAtt BackendInstance.PublicIp' obtiene el atributo dinamico de la IP asignada por AWS
+  IpPublicaBackend:
+    Description: IP publica del Backend
+    Value: !GetAtt BackendInstance.PublicIp
+
+  # ID de la instancia de Frontend
+  IdFrontend:
+    Description: ID de la instancia EC2 del Servidor Frontend
+    Value: !Ref FrontendInstance
+
+  # IP publica del Frontend
+  IpPublicaFrontend:
+    Description: IP publica del Frontend
+    Value: !GetAtt FrontendInstance.PublicIp
+
+  # URL web directa para abrir en el navegador
+  UrlWebFrontend:
+    Description: URL publica para acceder a la aplicacion web
+    Value: !Sub "http://${FrontendInstance.PublicIp}"
+
+  # Comando SSH directo listo para copiar y pegar en la terminal
+  ConexionSSHBackend:
+    Description: Comando para conectarse por SSH al Backend
+    Value: !Sub "ssh -i ~/.ssh/diplo_mod2_key ubuntu@${BackendInstance.PublicIp}"
+
+  ConexionSSHFrontend:
+    Description: Comando para conectarse por SSH al Frontend
+    Value: !Sub "ssh -i ~/.ssh/diplo_mod2_key ubuntu@${FrontendInstance.PublicIp}"

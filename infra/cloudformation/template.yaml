@@ -4,9 +4,7 @@ Description: >
   Proyecto: Control de Asistencia Academica
   Diplomado DevSecOps - Modulo 2 (IaC)
 
-# ==============================================================================
 # PARAMETROS DE ENTRADA
-# ==============================================================================
 Parameters:
   Proyecto:
     Type: String
@@ -35,14 +33,11 @@ Parameters:
     Default: ami-0ee52710c51e09069
     Description: AMI de Ubuntu 22.04 LTS en us-east-2
 
-# ==============================================================================
 # RECURSOS (RESOURCES)
-# ==============================================================================
 Resources:
 
-  # ----------------------------------------------------------------------------
+
   # 1. GRUPO DE SEGURIDAD: BACKEND (SSH 22, API 3000, DB 5432)
-  # ----------------------------------------------------------------------------
   BackendSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
@@ -71,9 +66,7 @@ Resources:
         - Key: Ambiente
           Value: !Ref Ambiente
 
-  # ----------------------------------------------------------------------------
   # 2. GRUPO DE SEGURIDAD: FRONTEND (SSH 22, HTTP 80)
-  # ----------------------------------------------------------------------------
   FrontendSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
@@ -97,9 +90,7 @@ Resources:
         - Key: Ambiente
           Value: !Ref Ambiente
 
-  # ----------------------------------------------------------------------------
   # 3. INSTANCIA EC2: SERVIDOR BACKEND
-  # ----------------------------------------------------------------------------
   BackendInstance:
     Type: AWS::EC2::Instance
     Properties:
@@ -132,9 +123,7 @@ Resources:
         - Key: Role
           Value: Backend-API-DB
 
-  # ----------------------------------------------------------------------------
   # 4. INSTANCIA EC2: SERVIDOR FRONTEND
-  # ----------------------------------------------------------------------------
   FrontendInstance:
     Type: AWS::EC2::Instance
     Properties:
@@ -167,9 +156,7 @@ Resources:
         - Key: Role
           Value: Frontend-UI-Nginx
 
-# ==============================================================================
 # SALIDAS (OUTPUTS)
-# ==============================================================================
 Outputs:
   IdBackend:
     Description: ID de la instancia EC2 del Servidor Backend
