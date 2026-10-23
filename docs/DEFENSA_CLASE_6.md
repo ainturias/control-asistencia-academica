@@ -1,102 +1,99 @@
-# Guía de Defensa Técnica - Aprovisionamiento con AWS CloudFormation y Seguridad
+# Guía Rápida de Defensa - AWS CloudFormation (Clase 6)
 
-**Módulo 2:** Infraestructura como Código (IaC)  
-**Proyecto:** Control de Asistencia Académica  
 **Estudiante:** Alexander Inturias (`ainturias`)  
-**Clase:** Clase 6  
+**Proyecto:** Control de Asistencia Académica  
+**Módulo:** Módulo 2 - Infraestructura como Código (IaC)  
 
 ---
 
-## 1. Objetivos de la Presentación
+## 1. Resumen de lo que vas a presentar (30 segundos)
 
-1. **Demostrar el aprovisionamiento de la arquitectura con AWS CloudFormation:**
-   * Mostrar el template declarativo en YAML ([`infra/cloudformation/template.yaml`](../infra/cloudformation/template.yaml)).
-   * Explicar la gestión nativa del estado de AWS mediante **Stacks** y cómo se eliminó la necesidad de un archivo `.tfstate`.
-   * Demostrar la resolución de dependencias mediante funciones intrínsecas (`!Sub`, `!Ref`, `!GetAtt`), donde el Frontend Nginx recibe automáticamente la IP pública del Backend.
-2. **Demostrar la suite de escáneres de seguridad aplicados a CloudFormation:**
-   * **`cfn-lint`**: Linter oficial de AWS CloudFormation para cumplimiento de esquemas.
-   * **`terrascan`**: Análisis de seguridad y cumplimiento normativo **CIS Benchmarks** para templates CFT (`-i cft`).
-   * **`gitleaks`**: Auditoría de prevención de fuga de secretos en scripts de automatización.
+> *"Buenas noches ingeniero. Para esta entrega migramos la infraestructura a **AWS CloudFormation** utilizando un template declarativo en YAML. Aprovisionamos **2 servidores EC2** (Backend y Frontend) con discos gp3 cifrados, sus respectivos **Security Groups** con reglas de firewall para SSH, HTTP y puertos de la aplicación, y configuramos una **suite de 3 escáneres de seguridad** (`cfn-lint`, `terrascan` y `gitleaks`) para validar la infraestructura antes del despliegue."*
 
 ---
 
-## 2. Comparativa Técnica: Terraform vs Pulumi vs AWS CloudFormation
+## 2. Paso a Paso para la Demostración en la Consola Web de AWS
 
-Si el docente pregunta: *"¿Qué diferencias prácticas notaste al migrar tu proyecto de Terraform a CloudFormation?"*:
+Si el docente te pide crear o mostrar el Stack en vivo en AWS:
 
-| Criterio | HashiCorp Terraform | Pulumi (TypeScript) | AWS CloudFormation |
-| :--- | :--- | :--- | :--- |
-| **Soporte Cloud** | Multicloud (AWS, Azure, GCP) | Multicloud (AWS, Azure, GCP) | Específico y optimizado para AWS |
-| **Lenguaje** | HCL (HashiCorp Configuration Language) | Lenguaje de propósito general (TypeScript, Python) | YAML o JSON declarativo |
-| **Manejo de Estado** | Requiere backend externo (`tfstate` en S3 / Azure Blob con Locking) | Requiere servicio Pulumi o backend local | **Totalmente gestionado por AWS** (sin archivo de estado externo) |
-| **Rollback ante Fallos** | No automático (deja recursos a medio crear) | No automático por defecto | **Automático y completo** (regresa al estado cero si un recurso falla) |
-| **Previsualización** | `terraform plan` | `pulumi preview` | **Change Sets** |
+1. **Entrar a la Consola de AWS:**
+   * Asegúrate de estar en la región **`us-east-2` (Ohio)** (arriba a la derecha).
+   * En el buscador escribe **CloudFormation** y entra al servicio.
 
----
+2. **Crear el Stack:**
+   * Clic en el botón naranja: **Create stack** -> **With new resources (standard)**.
+   * En *Prerequisite*: Deja marcado **Template is ready**.
+   * En *Specify template*: Marca **Upload a template file**.
+   * Clic en **Choose file** y selecciona:
+     `/home/alex/Escritorio/PC-TODO/diplo-mod-2/control-asistencia-academica/infra/cloudformation/template.yaml`
+   * Clic en **Next**.
 
-## 3. Guion Paso a Paso para la Exposición en Vivo
+3. **Parámetros del Stack:**
+   * **Stack name:** `stack-asistencia-dev`
+   * **Ambiente:** `dev`
+   * **KeyName:** `diplo-mod2-key`
+   * **TipoInstancia:** `t3.micro`
+   * Clic en **Next** -> **Next** (dejar opciones por defecto) -> Clic en **Submit**.
 
-### Paso 1: Introducción (30 segundos)
-> *"Buenas noches ingeniero, buenas noches compañeros. Para esta práctica migramos toda la infraestructura de nuestro sistema de Control de Asistencia a **AWS CloudFormation** utilizando un template declarativo en YAML. Definimos dos servidores EC2 con discos cifrados gp3, sus respectivos Security Groups y la automatización completa de despliegue de NestJS, PostgreSQL y React con Nginx."*
-
----
-
-### Paso 2: Mostrar el Template en YAML (1 minuto)
-Abre el archivo [`infra/cloudformation/template.yaml`](../infra/cloudformation/template.yaml) en el editor y destaca los siguientes puntos:
-1. **Parámetros (`Parameters`):**
-   * Señala que el template es reutilizable entre ambientes (`dev`, `qa`, `prod`) y permite cambiar el tipo de instancia (`t3.micro`, `t3.small`).
-2. **Recursos (`Resources`):**
-   * **Backend:** Instancia EC2 con 20GB EBS gp3 cifrado. Muestra el bloque `UserData` donde se configura memoria swap de 2GB, Node.js 22, PostgreSQL y PM2.
-   * **Frontend:** Muestra la configuración de Nginx y destaca la función:
-     ```yaml
-     proxy_pass http://${BackendInstance.PublicIp}:3000/api/;
-     ```
-     > *"Lo más potente de CloudFormation es que no necesitamos conocer la IP del Backend de antemano; mediante `!Sub` y `${BackendInstance.PublicIp}`, AWS inyecta dinámicamente la IP pública en la configuración de Nginx durante el aprovisionamiento."*
-3. **Salidas (`Outputs`):** Muestra las exportaciones de URLs e IPs públicas.
+4. **Qué mostrar mientras se crea (tarda solo ~40 segundos):**
+   * Pestaña **Events**: Muestra cómo CloudFormation crea primero los Security Groups y luego las dos instancias EC2.
+   * Pestaña **Resources**: Muestra que los 4 recursos (`BackendSecurityGroup`, `FrontendSecurityGroup`, `BackendInstance`, `FrontendInstance`) están creados.
+   * Pestaña **Outputs**: Muestra las IPs públicas generadas.
+   * **Abrir la URL Web en el navegador:** Haz clic o abre `http://<IP_PUBLICA_FRONTEND>` y se verá la página web de confirmación de Nginx activa.
 
 ---
 
-### Paso 3: Demostración en AWS (Consola o CLI) (1.5 minutos)
+## 3. Paso a Paso para Explicar el Código YAML (`template.yaml`)
 
-#### En la Consola Web de AWS:
-1. Ir al servicio **CloudFormation** en la región **`us-east-2` (Ohio)**.
-2. Mostrar el Stack creado (ej. `stack-asistencia-dev`) en estado **`CREATE_COMPLETE`**.
-3. Ir a la pestaña **Resources**: mostrar los Security Groups y las 2 instancias EC2.
-4. Ir a la pestaña **Outputs**: mostrar los valores de `UrlWebFrontend` y `IpPublicaBackend`.
-5. Abrir la URL web en una pestaña del navegador para demostrar que el frontend carga y se comunica con la API.
+Abre [`infra/cloudformation/template.yaml`](../infra/cloudformation/template.yaml) en tu editor y muestra sus 4 bloques principales:
+
+1. **`Parameters` (Líneas 10 - 36):**
+   > *"Hicimos el template modular y reutilizable. Permite alternar entre ambientes (`dev`, `qa`, `prod`) y cambiar el tamaño de instancia (`t3.micro`, `t3.small`) sin tocar el código fuente."*
+
+2. **`Security Groups` (Líneas 43 - 95):**
+   > *"Declaramos dos grupos de seguridad: uno para el Backend abriendo SSH (22), API NestJS (3000) y PostgreSQL (5432), y otro para el Frontend abriendo SSH (22) y HTTP (80)."*
+
+3. **`EC2 Instances` (Líneas 97 - 165):**
+   > *"Aprovisionamos las 2 máquinas con discos EBS gp3 de 20GB y 15GB con **cifrado en reposo (`Encrypted: true`)**. En el bloque `UserData` automatizamos el arranque instalando Nginx para validar la conectividad en segundos."*
+
+4. **`Outputs` (Líneas 167 - 200):**
+   > *"Exportamos las IPs públicas y los comandos SSH directos para administración."*
 
 ---
 
-### Paso 4: Demostración de los Escáneres de Seguridad (1.5 minutos)
+## 4. Demostración de los 3 Escáneres de Seguridad (Terminal)
 
-Abre la terminal y ejecuta el script unificado de escaneo:
+Abre una terminal y ejecuta el script automatizado:
 
 ```bash
 cd ~/Escritorio/PC-TODO/diplo-mod-2/control-asistencia-academica
 ./infra/scripts/run-cfn-scans.sh
 ```
 
-Explica cada herramienta mientras se imprimen los resultados:
+Explica cada herramienta según vaya apareciendo en pantalla:
 
-1. **`cfn-lint` (Linter Oficial de AWS):**
-   > *"Primero ejecutamos `cfn-lint`. Esta herramienta valida que nuestro YAML cumpla al 100% con la especificación del Resource Specification de AWS, detectando errores de sintaxis, tipos de datos inválidos y dependencias circulares antes de tocar la nube."*
-   *(Muestra que termina con éxito total y 0 errores).*
+### 1. `cfn-lint` (Linter Oficial de AWS)
+* **Qué hace:** Valida la sintaxis YAML y los esquemas oficiales de AWS Resource Specification.
+* **Qué decir:** *"cfn-lint valida que el template cumpla al 100% con la especificación de AWS, comprobando que no existan errores de nombres, referencias nulas o tipos incompatibles. Aquí vemos que pasa con cero errores."*
 
-2. **`terrascan scan -i cft` (Cumplimiento de Políticas CIS):**
-   > *"Luego ejecutamos `terrascan` con el flag `-i cft` (CloudFormation Template). Evalúa 142 políticas de seguridad basadas en **CIS Benchmarks** y nos señala buenas prácticas a nivel empresarial: nos recomienda activar monitoreo detallado en CloudWatch y restringir el puerto SSH 22 para que no esté abierto al mundo."*
+### 2. `terrascan` (Cumplimiento de Políticas CIS Benchmarks)
+* **Comando que corre:** `terrascan scan -i cft -f template.yaml`
+* **Qué hace:** Evalúa 142 políticas de seguridad bajo el estándar CIS Benchmarks para CloudFormation.
+* **Qué decir:** *"Terrascan evalúa políticas de seguridad empresarial. Nos señala 9 observaciones comunes en despliegues iniciales: nos advierte que los puertos 22 y 5432 están abiertos a internet y nos recomienda activar monitoreo detallado de CloudWatch y tokens IMDSv2."*
 
-3. **`gitleaks` (Secret Scanning):**
-   > *"Por último, corremos `gitleaks`. Audita el template en apenas 20 milisegundos y nos alerta si alguien hardcodeó credenciales o tokens en los scripts de inicio."*
+### 3. `gitleaks` (Secret Scanning)
+* **Qué hace:** Búsqueda ultrarrápida de contraseñas, tokens y llaves API en el template.
+* **Qué decir:** *"Gitleaks analiza el archivo en 15 milisegundos y confirma que no dejamos ninguna contraseña de base de datos ni token de AWS expuesto en el código."*
 
 ---
 
-## 4. Preguntas Frecuentes del Docente y Respuestas Sugeridas
+## 5. Preguntas Típicas del Docente y Respuestas Rápidas
 
-### P1: "¿Por qué CloudFormation no tiene un archivo `terraform.tfstate`?"
-> **Respuesta:** *"Porque CloudFormation es un servicio gestionado (managed service) nativo de AWS. AWS mantiene internamente el grafo de dependencias y el estado del ciclo de vida dentro del motor del Stack. Esto elimina la necesidad de configurar buckets S3 y tablas DynamoDB para el bloqueo de estado (state locking) que hacíamos en Terraform."*
+* **P: ¿Por qué en CloudFormation no hay archivo `tfstate` como en Terraform?**
+  * **R:** *"Porque CloudFormation es un servicio gestionado por AWS. AWS almacena y sincroniza el estado internamente dentro del motor del Stack, por lo que no necesitamos configurar buckets S3 ni DynamoDB para bloqueo de concurrencia."*
 
-### P2: "¿Qué pasa si la segunda instancia EC2 falla durante la creación?"
-> **Respuesta:** *"CloudFormation activa un rollback automático. Si la instancia del Frontend falla, CloudFormation destruye la instancia Backend y los Security Groups que se crearon en ese mismo proceso, devolviendo la cuenta al estado inicial limpio y evitando costos por recursos huérfanos."*
+* **P: ¿Qué ventaja tiene CloudFormation si falla la creación de un recurso?**
+  * **R:** *"Cuenta con **rollback automático**. Si la segunda máquina falla al crearse, CloudFormation destruye automáticamente los recursos creados en ese intento y deja la cuenta limpia en el estado cero, evitando costos por recursos huérfanos."*
 
-### P3: "¿Cómo previsualizas los cambios antes de desplegar en CloudFormation?"
-> **Respuesta:** *"Mediante **Change Sets**. Es la funcionalidad equivalente a `terraform plan` en CloudFormation. Permite ver el diff exacto de qué recursos se agregarán, modificarán o destruirán antes de confirmar la ejecución."*
+* **P: ¿Qué es un Change Set?**
+  * **R:** *"Es el equivalente a `terraform plan`. Permite ver la previsualización exacta de qué recursos se van a crear, modificar o eliminar antes de aplicar cambios a un Stack en producción."*
